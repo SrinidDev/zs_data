@@ -1,0 +1,207 @@
+### EDA##
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# Load the data
+order_data = pd.read_csv('customer_order_history.csv')
+pilot_data = pd.read_csv('pilot_experiment_data.csv')
+
+# Basic Information
+print("Order Data Info:")
+print(order_data.info())
+print("\nPilot Experiment Data Info:")
+print(pilot_data.info())
+
+# Check for missing values
+print("Missing Values in Order Data:")
+print(order_data.isnull().sum())
+print("\nMissing Values in Pilot Data:")
+print(pilot_data.isnull().sum())
+
+# Check for duplicates
+print("Duplicates in Order Data:", order_data.duplicated().sum())
+print("Duplicates in Pilot Data:", pilot_data.duplicated().sum())
+
+# Summary statistics for numerical columns
+print("Order Data Summary:")
+print(order_data.describe())
+print("\nPilot Data Summary:")
+print(pilot_data.describe())
+
+
+
+ ### ANalyze date columns
+# Convert date columns to datetime
+order_data['order_date'] = pd.to_datetime(order_data['order_date'])
+pilot_data['date'] = pd.to_datetime(pilot_data['date'])
+
+# Extracting features from the date (e.g., month, day of week)
+order_data['order_month'] = order_data['order_date'].dt.month
+order_data['order_dayofweek'] = order_data['order_date'].dt.dayofweek
+pilot_data['pilot_month'] = pilot_data['date'].dt.month
+pilot_data['pilot_dayofweek'] = pilot_data['date'].dt.dayofweek
+
+
+
+#####Visualize Spending and Discounts
+# Distribution of Order Amounts
+plt.figure(figsize=(10, 6))
+sns.histplot(order_data['order_amount'], bins=30, kde=True)
+plt.title("Distribution of Order Amounts")
+plt.xlabel("Order Amount")
+plt.ylabel("Frequency")
+plt.show()
+
+# Relationship between Order Amount and Discount Amount
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='discount_amount', y='order_amount', data=order_data)
+plt.title("Order Amount vs. Discount Amount")
+plt.xlabel("Discount Amount")
+plt.ylabel("Order Amount")
+plt.show()
+
+# Average Order Amount per Day of the Week
+avg_order_by_day = order_data.groupby('order_dayofweek')['order_amount'].mean()
+plt.figure(figsize=(10, 6))
+sns.barplot(x=avg_order_by_day.index, y=avg_order_by_day.values)
+plt.title("Average Order Amount by Day of the Week")
+plt.xlabel("Day of the Week")
+plt.ylabel("Average Order Amount")
+plt.show()
+
+
+Feature Engineering
+Create additional features that capture the customer's historical purchase patterns:
+
+# Aggregate order data by customer for total and average spend
+customer_spending = order_data.groupby('customer_id').agg(
+    total_spent=('order_amount', 'sum'),
+    avg_order_amount=('order_amount', 'mean'),
+    order_frequency=('order_id', 'nunique'),
+    avg_discount=('discount_amount', 'mean')
+).reset_index()
+
+# Aggregate pilot experiment data by customer for reward patterns
+pilot_features = pilot_data.groupby('customer_id').agg(
+    avg_vnr=('vnr', 'mean'),
+    avg_reward_value=('reward_value', 'mean'),
+    total_gross_sales=('gross_sales', 'sum'),
+    avg_discount=('discount_amount', 'mean')
+).reset_index()
+
+# Merge order and pilot data for feature set
+combined_data = pd.merge(customer_spending, pilot_features, on='customer_id', how='left')
+
+
+Step 2: Data Preprocessing
+Now that we have engineered the features, let’s preprocess the data for modeling.
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+# Define feature set X and target variable y (reward value)
+X = combined_data.drop(['customer_id', 'avg_reward_value'], axis=1)
+y = combined_data['avg_reward_value']
+
+# Split the data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Scale the features
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_test = scaler.transform(X_test)
+
+
+
+Step 3: Predictive Modeling
+Since the goal is to predict rewards, we can use regression models to predict the average reward value for customers. Below are a few machine learning algorithms to consider.
+
+1. Linear Regression
+A simple model to start with for baseline predictions.
+
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+# Initialize and fit the model
+lr_model = LinearRegression()
+lr_model.fit(X_train, y_train)
+
+# Make predictions
+y_pred_lr = lr_model.predict(X_test)
+
+# Evaluate the model
+print("Linear Regression MAE:", mean_absolute_error(y_test, y_pred_lr))
+print("Linear Regression RMSE:", np.sqrt(mean_squared_error(y_test, y_pred_lr)))
+
+
+2. Random Forest Regressor
+A more complex model that can capture non-linear relationships.
+
+from sklearn.ensemble import RandomForestRegressor
+
+# Initialize and fit the model
+rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+
+# Make predictions
+y_pred_rf = rf_model.predict(X_test)
+
+# Evaluate the model
+print("Random Forest MAE:", mean_absolute_error(y_test, y_pred_rf))
+print("Random Forest RMSE:", np.sqrt(mean_squared_error(y_test, y_pred_rf)))
+
+
+3. Gradient Boosting Regressor
+Gradient Boosting is another effective algorithm that generally performs well on tabular data.
+
+
+from sklearn.ensemble import GradientBoostingRegressor
+
+# Initialize and fit the model
+gb_model = GradientBoostingRegressor(n_estimators=100, random_state=42)
+gb_model.fit(X_train, y_train)
+
+# Make predictions
+y_pred_gb = gb_model.predict(X_test)
+
+# Evaluate the model
+print("Gradient Boosting MAE:", mean_absolute_error(y_test, y_pred_gb))
+print("Gradient Boosting RMSE:", np.sqrt(mean_squared_error(y_test, y_pred_gb)))
+
+
+Step 4: Model Evaluation and Selection
+Evaluate each model based on metrics like Mean Absolute Error (MAE) and Root Mean Squared Error (RMSE). Choose the model with the lowest error for deployment.
+
+Step 5: Model Interpretation and Business Insights
+Analyze feature importance to understand what drives rewards. This will help tailor the loyalty program to focus on factors most related to high rewards.
+
+# Feature importance for Random Forest (if this was chosen as the final model)
+importances = rf_model.feature_importances_
+feature_names = X.columns
+feature_importances = pd.DataFrame({'feature': feature_names, 'importance': importances})
+feature_importances = feature_importances.sort_values('importance', ascending=False)
+
+# Plot feature importance
+plt.figure(figsize=(10, 6))
+sns.barplot(x='importance', y='feature', data=feature_importances)
+plt.title("Feature Importance")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.show()
+
+
+Final Step: Deployment
+Once you’ve selected the best model, you can save it and deploy it in a production environment to make real-time predictions on customer reward values. Use libraries like joblib or pickle to save the model.
+
+
+import joblib
+
+# Save the model
+joblib.dump(rf_model, 'reward_prediction_model.pkl')
+
+# Load the model for future use
+loaded_model = joblib.load('reward_prediction_model.pkl')
+
