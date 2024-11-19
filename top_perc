@@ -1,0 +1,49 @@
+def get_ranks(df, threshold):
+    scores = ['curr_riskscore_pros_impute', 'y_pred', 'actual_prosp_riskscore']
+    rank_values = ['H', 'L']
+    temp_columns = copy(df[scores])
+    out_columns = []
+    for s in scores:       
+        rank_conds = [df[s]>=df[s].quantile(threshold), df[s]<=df[s].quantile(threshold)]
+        word = s + '_rank'
+        out_columns.append(word)
+        temp_columns[word] = np.select(rank_conds, rank_values)
+    return pd.concat([df, temp_columns[out_columns]], axis=1)
+ 
+thresholds = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,0.97,0.99]
+# thresholds = [0.5,0.6,0.7,0.8,0.9,0.95,0.97,0.99]
+pros_results = []
+for t in thresholds:
+    pros_results.append(get_ranks(df_pred, t))
+
+ 
+def get_confusion(df, version, riskscore_pros_pred):
+    if version == 'pros':
+        tp = len(df[(df[riskscore_pros_pred+'_rank']=='H')&(df['actual_prosp_riskscore_rank']=='H')])
+        fp = len(df[(df[riskscore_pros_pred+'_rank']=='H')&(df['actual_prosp_riskscore_rank']=='L')])
+        tn = len(df[(df[riskscore_pros_pred+'_rank']=='L')&(df['actual_prosp_riskscore_rank']=='L')])
+        fn = len(df[(df[riskscore_pros_pred+'_rank']=='L')&(df['actual_prosp_riskscore_rank']=='H')])
+#         print([tp,fp,tn,fn])
+    else:
+        tp = len(df[(df['riskscore_conc_imp_rank']=='H')&(df['actual_risk_rank']=='H')])
+        fp = len(df[(df['riskscore_conc_imp_rank']=='H')&(df['actual_risk_rank']=='L')])
+        tn = len(df[(df['riskscore_conc_imp_rank']=='L')&(df['actual_risk_rank']=='L')])
+        fn = len(df[(df['riskscore_conc_imp_rank']=='L')&(df['actual_risk_rank']=='H')])
+    if (tn+fp) == 0:
+        actual_low = [fp,tn,'NA']
+    else:
+        actual_low = [fp,tn,tn/(tn+fp)]
+    return pd.DataFrame({'Actual High':[tp, fn, tp/(tp+fn)], 'Actual Low':actual_low, 'Measures':[tp/(tp+fp), tn/(tn+fn), (tp+tn)/(tp+tn+fp+fn)]}, 
+                            index=['Predict High', 'Predict Low', "Measures"])
+#     return [tp,fp,tn,fn]
+ 
+pros_measures = {'Sensitivity':[], 'PPV':[], 'Accuracy':[]}
+measure_index = [('Top ' + str(round((1-t)*100)) + '%') for t in thresholds]
+ 
+for a in pros_results:
+    pros_confusion = get_confusion(a, version='pros', riskscore_pros_pred='y_pred')
+    pros_measures['Sensitivity'].append(pros_confusion.iloc[2,0])
+    pros_measures['PPV'].append(pros_confusion.iloc[0,2])
+    pros_measures['Accuracy'].append(pros_confusion.iloc[2,2])
+display(pros_confusion)    
+pros_measure_table = pd.DataFrame(pros_measures, index=measure_index)
