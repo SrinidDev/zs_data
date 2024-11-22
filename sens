@@ -1,0 +1,39 @@
+import copy
+def predict_prob(df, emr_coeff,target_var):
+ 
+    score_columns = list(emr_coeff.index)
+ 
+    score_columns.remove('const')
+ 
+    df_1 = copy.copy(df[score_columns])
+    
+    df_1=df_1.astype(float)
+    df_1['score'] = emr_coeff.iloc[0][0]
+    
+ 
+    for c in list(emr_coeff.iloc[1:,:].index):
+ 
+        df_1['score'] += df_1[c] * emr_coeff.loc[c][0]
+#         print(df_1['score'])
+
+    df_1['predict_prob']=np.exp(df_1['score'])/(np.exp(df_1['score'])+1)
+#     print(df_1['predict_prob'])
+ 
+    df_1['predict_prob'] = df_1['predict_prob']
+    df_1['memberedenuid']=df['memberedenuid']
+    df_1[target_var]=df[target_var]
+    df_1['riskscore_conc_imp']=df['riskscore_conc_imp']
+    
+    df_1['precentile'] = pd.qcut(df_1['predict_prob'].rank(method='first'),10,labels=list(range(1,11)))
+    mh_wp_l_cp_result = df_1.groupby(['precentile']).agg({target_var : ["count","sum"]}).reset_index()
+    display(df_1.groupby(['precentile']).agg({ "predict_prob": ["mean",np.median,"min","max"]}).reset_index())
+
+    mh_wp_l_cp_result['reached_indicator (%)'] = (mh_wp_l_cp_result[target_var]['sum']/mh_wp_l_cp_result[target_var]['count'])
+#     * 100
+    
+    
+    display(mh_wp_l_cp_result )
+    display(quantiles(df_1,['predict_prob']))
+    print('AUC',roc_auc_score(df_1[target_var],df_1['predict_prob']))
+    
+    return df_1[['memberedenuid','predict_prob',target_var,'riskscore_conc_imp']]
